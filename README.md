@@ -1,1 +1,1 @@
-# simple-database
+# simpledatabase
