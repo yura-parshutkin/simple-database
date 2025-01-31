@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"net"
 	"simpledatabase/pkg/pumbkin/compute"
 	"simpledatabase/pkg/pumbkin/handler"
@@ -17,7 +18,7 @@ func TestTcpServer_SetAndGetData(t *testing.T) {
 	h := handler.NewHandler(storage.NewInMemoryEngine(), compute.NewParser())
 
 	host := "localhost:8090"
-	srv := network.NewTcpServer(host, 0, 0, 0, h)
+	srv := network.NewTcpServer(host, 0, 0, 0, h, zap.NewNop())
 	ctx := context.Background()
 
 	go func() {
@@ -48,14 +49,14 @@ func TestTcpServer_SetAndGetData(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "[ok] bar", string(buf[:count]))
 
-	srv.Stop()
+	_ = srv.Stop()
 }
 
 func TestTcpServer_RateConnections(t *testing.T) {
 	n := handler.NewHandler(storage.NewInMemoryEngine(), compute.NewParser())
 
 	host := "localhost:8090"
-	srv := network.NewTcpServer(host, 2, 0, 1*time.Second, n)
+	srv := network.NewTcpServer(host, 2, 0, 1*time.Second, n, zap.NewNop())
 	ctx := context.Background()
 
 	go func() {
@@ -89,5 +90,5 @@ func TestTcpServer_RateConnections(t *testing.T) {
 	_, _ = c4.Write([]byte("GET foo4"))
 	_, _ = c4.Read(buf)
 
-	srv.Stop()
+	_ = srv.Stop()
 }

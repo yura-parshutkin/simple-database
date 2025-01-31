@@ -18,6 +18,7 @@ type TcpServer struct {
 	handler        *handler.Handler
 	semaphore      *concurrency.Semaphore
 	listen         net.Listener
+	logger         *zap.Logger
 }
 
 func NewTcpServer(
@@ -26,6 +27,7 @@ func NewTcpServer(
 	maxMessageSize int,
 	idleTimeout time.Duration,
 	handler *handler.Handler,
+	logger *zap.Logger,
 ) *TcpServer {
 	if maxConnections == 0 {
 		maxConnections = 100
@@ -39,6 +41,7 @@ func NewTcpServer(
 		idleTimeout:    idleTimeout,
 		handler:        handler,
 		semaphore:      concurrency.NewSemaphore(maxConnections),
+		logger:         logger,
 	}
 }
 
@@ -49,12 +52,12 @@ func (s *TcpServer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 	defer func() { _ = s.listen.Close() }()
-	zap.L().Info("server listening", zap.String("address", s.address))
+	s.logger.Info("server listening", zap.String("address", s.address))
 
 	for {
 		conn, errAc := s.listen.Accept()
 		if errAc != nil {
-			zap.L().Error("error accepting:", zap.Error(errAc))
+			s.logger.Error("error accepting:", zap.Error(errAc))
 			continue
 		}
 		s.semaphore.Acquire()
@@ -68,7 +71,7 @@ func (s *TcpServer) Start(ctx context.Context) error {
 func (s *TcpServer) handle(ctx context.Context, conn net.Conn) {
 	defer func() {
 		if v := recover(); v != nil {
-			zap.L().Error("recover from panic", zap.Any("panic", v))
+			s.logger.Error("recover from panic", zap.Any("panic", v))
 		}
 	}()
 	defer func() { _ = conn.Close() }()
@@ -77,14 +80,14 @@ func (s *TcpServer) handle(ctx context.Context, conn net.Conn) {
 	if s.idleTimeout != 0 {
 		errRe := conn.SetReadDeadline(time.Now().Add(s.idleTimeout))
 		if errRe != nil {
-			zap.L().Error("error set count read deadline:", zap.Error(errRe))
+			s.logger.Error("error set count read deadline:", zap.Error(errRe))
 			return
 		}
 	}
 	if s.idleTimeout != 0 {
 		errWr := conn.SetWriteDeadline(time.Now().Add(s.idleTimeout))
 		if errWr != nil {
-			zap.L().Error("error set count write deadline:", zap.Error(errWr))
+			s.logger.Error("error set count write deadline:", zap.Error(errWr))
 			return
 		}
 	}
@@ -93,26 +96,26 @@ func (s *TcpServer) handle(ctx context.Context, conn net.Conn) {
 		if errRe == io.EOF {
 			return
 		} else if errRe != nil {
-			zap.L().Error("error read:", zap.Error(errRe))
+			s.logger.Error("error read:", zap.Error(errRe))
 			return
 		}
 		if count == len(buff) {
-			zap.L().Error("error max buffer size reached", zap.Int("count", count))
+			s.logger.Error("error max buffer size reached", zap.Int("count", count))
 			return
 		}
 		out, errHand := s.handler.Handle(ctx, string(buff[:count]))
 		if errHand != nil {
-			zap.L().Error("connection count error:", zap.Error(errHand))
+			s.logger.Error("connection count error:", zap.Error(errHand))
 			return
 		}
 		_, errWr := conn.Write([]byte("[ok] " + out))
 		if errWr != nil {
-			zap.L().Error("connection write error:", zap.Error(errWr))
+			s.logger.Error("connection write error:", zap.Error(errWr))
 			return
 		}
 	}
 }
 
-func (s *TcpServer) Stop() {
-	_ = s.listen.Close()
+func (s *TcpServer) Stop() error {
+	return s.listen.Close()
 }

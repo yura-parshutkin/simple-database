@@ -1,13 +1,21 @@
 package initialization
 
 import (
+	"go.uber.org/zap"
 	"simpledatabase/pkg/pumbkin/compute"
+	"simpledatabase/pkg/pumbkin/config"
 	"simpledatabase/pkg/pumbkin/handler"
 	"simpledatabase/pkg/pumbkin/network"
 	"simpledatabase/pkg/pumbkin/storage"
 )
 
-func CreateServer(host string) *network.TcpServer {
-	handler := handler.NewHandler(storage.NewInMemoryEngine(), compute.NewParser())
-	return network.NewTcpServer(host, 0, 0, 0, handler)
+func CreateServer(config *config.Network, logger *zap.Logger) (*network.TcpServer, error) {
+	return network.NewTcpServer(
+		config.Address,
+		config.MaxConnections,
+		config.MaxMessageSize,
+		config.IdleTimeout,
+		handler.NewHandler(storage.NewInMemoryEngine(), compute.NewParser()),
+		logger,
+	), nil
 }
